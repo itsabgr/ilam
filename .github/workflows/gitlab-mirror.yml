@@ -1,0 +1,18 @@
+name: gitlab-mirror
+
+on: 
+  - push
+  - delete
+
+jobs:
+  sync:
+    environment: GITLAB
+    runs-on: ubuntu-latest
+    name: Mirror Repo
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - uses: itsabgr/mirror-repo@v1.0.3
+      with:
+        target-url: ${{ secrets.URL }}
