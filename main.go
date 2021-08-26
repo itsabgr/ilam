@@ -12,7 +12,9 @@ import (
 
 var CONFIG struct {
 	ADDR   string `fig:"ADDR" default:"localhost:4433"`
-	ORIGIN string `fig:"ORIGIN" default:""`
+	CERT   string `fig:"CERT"`
+	KEY    string `fig:"KEY"`
+	ORIGIN string `fig:"ORIGIN"`
 }
 var logger = log.New(os.Stdout, "", 0)
 
@@ -35,5 +37,5 @@ func main() {
 		Origin: CONFIG.ORIGIN,
 	})
 	logger.Println(fmt.Sprintf("%+v", CONFIG))
-	handy.Throw(server.Listen("/etc/ssl/localhost.cert", "/etc/ssl/localhost.key"))
+	handy.Throw(server.Listen(CONFIG.CERT, CONFIG.KEY))
 }

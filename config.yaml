@@ -1,2 +1,4 @@
 ADDR: "0.0.0.0:4433"
 ORIGIN: ""
+CERT: "/etc/ssl/localhost.cert"
+KEY: "/etc/ssl/localhost.key"
