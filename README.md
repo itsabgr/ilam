@@ -1,5 +1,7 @@
 # ilam
 
+federated messaging server
+
 [![GitHub](https://img.shields.io/github/license/itsabgr/ilam)](https://github.com/itsabgr/ilam/blob/master/LICENSE)
 [![Go Reference](https://pkg.go.dev/badge/github.com/itsabgr/ilam.svg)](https://pkg.go.dev/github.com/itsabgr/ilam)
 [![Go Report Card](https://goreportcard.com/badge/github.com/itsabgr/ilam)](https://goreportcard.com/report/github.com/itsabgr/ilam)
