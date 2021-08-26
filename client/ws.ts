@@ -1,23 +1,25 @@
-type iterator = { value: MessageEvent, done: false } | { value: undefined, done: true }
+type iterator = { value: Blob, done: false } | { value: undefined, done: true }
 const key = Symbol()
 
-class WS implements AsyncIterator<MessageEvent> {
+class Client implements AsyncIterator<Blob> {
   static CONNECTING = WebSocket.CONNECTING
   static OPEN = WebSocket.OPEN
   static CLOSING = WebSocket.CLOSING
   static CLOSED = WebSocket.CLOSED
-  private readonly _messages = new Array<MessageEvent>()
+  private readonly _messages = new Array<Blob>()
   private readonly _waiters = new Array<{ resolve: (o: iterator) => void, reject: (err: Error | ErrorEvent) => void }>()
   private readonly _socket
 
   constructor(
-    private readonly _url: string,
+    private readonly _url: URL,
     _?: Symbol,
   ) {
     if (arguments[1] !== key) {
       throw new Error('use static connect method to init WS')
     }
-    this._socket = new WebSocket(_url)
+    const url = Object.assign({}, _url)
+    url.protocol = 'wss';
+    this._socket = new WebSocket(url.toString())
   }
 
   get readyState() {
@@ -28,6 +30,10 @@ class WS implements AsyncIterator<MessageEvent> {
     return this._socket.close()
   }
 
+  get url() {
+    return this._url
+  }
+
   set onClose(cb: (ev: Event) => void) {
     this._socket.addEventListener('error', (ev) => {
       cb(ev)
@@ -36,6 +42,19 @@ class WS implements AsyncIterator<MessageEvent> {
 
   [Symbol.asyncIterator]() {
     return this;
+  }
+
+  async send(to: string | number | bigint, data: Blob) {
+    const url = Object.assign({}, this._url)
+    url.protocol = 'https'
+    url.pathname = to.toString()
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      body: data,
+    })
+    if (!response.ok) {
+      throw new Error(response.statusText || response.status.toString())
+    }
   }
 
   next() {
@@ -56,9 +75,9 @@ class WS implements AsyncIterator<MessageEvent> {
   private _handleMessage(ev: MessageEvent) {
     const awaiter = this._waiters.shift()
     if (awaiter) {
-      return awaiter.resolve({value: ev, done: false})
+      return awaiter.resolve({value: ev.data, done: false})
     }
-    this._messages.push(ev)
+    this._messages.push(ev.data)
   }
 
   private _handleClose(ev: CloseEvent) {
@@ -77,9 +96,10 @@ class WS implements AsyncIterator<MessageEvent> {
     }
   }
 
-  static connect(url: string) {
-    return new Promise<WS>((resolve, reject) => {
-      const client = new WS(url, key)
+  static connect(host: string, port: number, id: number | string | bigint, auth?: string) {
+    const url = new URL(`https://${auth ? `${auth}@` : ''}${host}:${port}/${id.toString()}`)
+    return new Promise<Client>((resolve, reject) => {
+      const client = new Client(url as URL, key)
       client._socket.addEventListener('error', (ev) => {
         switch (client.readyState) {
           case WebSocket.CONNECTING:
@@ -99,3 +119,9 @@ class WS implements AsyncIterator<MessageEvent> {
     })
   }
 }
+
+async function main() {
+  const cli = Client.connect('localhost', 4433, 123)
+}
+
+main().catch(console.error)
