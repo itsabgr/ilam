@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/itsabgr/go-handy"
 	"io"
+	"io/ioutil"
 	"log"
 	"math"
 	"net/http"
@@ -56,6 +57,7 @@ func New(conf Config) Server {
 	if s.conf.LaunchAt == zeroTime {
 		s.conf.LaunchAt = time.Now()
 	}
+
 	s.upgrader.CheckOrigin = func(r *http.Request) bool {
 		if len(s.conf.Origin) == 0 {
 			return true
@@ -66,6 +68,9 @@ func New(conf Config) Server {
 	return s
 }
 func (s *server) Listen(certPath, keyPath string) error {
+	if len(certPath) == 0 && len(keyPath) == 0 {
+		return s.http.ListenAndServe()
+	}
 	return s.http.ListenAndServeTLS(certPath, keyPath)
 }
 func parseId(r *http.Request) (ID, error) {
@@ -82,6 +87,8 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			s.routeUpgrade(w, r)
 		}
+	case http.MethodPost:
+		s.routePost(w, r)
 	case http.MethodOptions:
 		s.routeCors(w, r)
 	default:
@@ -117,6 +124,44 @@ func (s *server) mapGet(cid ID) (*websocket.Conn, error) {
 	}
 	return conn, nil
 }
+func (s *server) routePost(w http.ResponseWriter, r *http.Request) {
+	cid, err := parseId(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		s.conf.Logger.Printf("cid: error: %s\n", err.Error())
+		return
+	}
+	conn, err := s.mapGet(cid)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		s.conf.Logger.Printf("cid: error: %s\n", err.Error())
+		return
+	}
+	err = s.conf.Authenticator(s, r, cid)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		s.conf.Logger.Printf("auth: error: %s\n", err.Error())
+		return
+	}
+	message, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		s.conf.Logger.Printf("body: error: %s\n", err.Error())
+		return
+	}
+	err = conn.WriteMessage(websocket.BinaryMessage, message)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		s.conf.Logger.Printf("send: error: %s\n", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 	if s.mapLen() >= math.MaxInt32 {
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -146,10 +191,10 @@ func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for {
-		kind, message, err := conn.ReadMessage()
+		kind, _, err := conn.ReadMessage()
 		if err != nil {
 			s.conf.Logger.Printf("ws: error: %s\n", err.Error())
-			break
+			return
 		}
 		switch kind {
 		case websocket.CloseMessage:
@@ -157,18 +202,11 @@ func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 		case websocket.PingMessage:
 		case websocket.PongMessage:
 			s.mapSet(cid, conn)
-		case websocket.TextMessage:
+		case websocket.TextMessage, websocket.BinaryMessage:
 			conn.WriteMessage(websocket.CloseMessage, []byte{})
-			s.conf.Logger.Printf("ws: msg: error: received text message")
+			s.conf.Logger.Printf("ws: msg: error: received a message")
 			return
-		case websocket.BinaryMessage:
-			err = s.handleMessage(cid, message)
-			if err != nil {
-				s.conf.Logger.Printf("ws: msg: error: %s\n", err.Error())
-				return
-			}
 		}
-
 	}
 }
 func isAllZero(bytes []byte) bool {
