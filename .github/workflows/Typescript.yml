@@ -19,8 +19,9 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - run: cd client
     - name: npm
+      working-directory: ./client
       run: npm install
     - name: test
+      working-directory: ./client
       run: tsc --noEmit
