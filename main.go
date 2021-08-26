@@ -10,6 +10,7 @@ import (
 	"os/signal"
 )
 
+//CONFIG is app config
 var CONFIG struct {
 	ADDR   string `fig:"ADDR" default:"localhost:4433"`
 	CERT   string `fig:"CERT"`
