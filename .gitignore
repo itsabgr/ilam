@@ -12,3 +12,4 @@ package-lock.json
 ilam
 *.exe
 *.out
+*.js
