@@ -1,0 +1,17 @@
+name: gitlab-mirror
+
+on: 
+  - push
+  - delete
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    name: Mirror Repo
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - uses: itsabgr/mirror-repo@v1.0.2
+      with:
+        target-url: test
