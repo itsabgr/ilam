@@ -1,127 +1,136 @@
 type iterator = { value: Blob, done: false } | { value: undefined, done: true }
 const key = Symbol()
 
-class Client implements AsyncIterator<Blob> {
-  static CONNECTING = WebSocket.CONNECTING
-  static OPEN = WebSocket.OPEN
-  static CLOSING = WebSocket.CLOSING
-  static CLOSED = WebSocket.CLOSED
+class Peer {
   private readonly _messages = new Array<Blob>()
   private readonly _waiters = new Array<{ resolve: (o: iterator) => void, reject: (err: Error | ErrorEvent) => void }>()
-  private readonly _socket
+  private _socket?: WebSocket
 
   constructor(
-    private readonly _url: URL,
-    _?: Symbol,
+    private readonly _id: string,
+    private _host: string,
+    private _auth?: string,
   ) {
-    if (arguments[1] !== key) {
-      throw new Error('use static connect method to init WS')
+  }
+
+  async send(peer: Peer, data: Blob | ArrayBuffer | ArrayBufferView | ReadableStream<Uint8Array>) {
+    const response = await fetch(
+      peer.toURL().toString(),
+      {
+        method: 'POST',
+        keepalive: true,
+        body: data,
+      })
+    if (!response.ok) {
+      throw new Error(response.statusText)
     }
-    const url = Object.assign({}, _url)
-    url.protocol = 'wss';
-    this._socket = new WebSocket(url.toString())
   }
 
-  get readyState() {
-    return this._socket.readyState
+  private _onClose() {
+    while (true) {
+      const waiter = this._waiters.shift()
+      if (!waiter) {
+        break
+      }
+      waiter.resolve({value: undefined, done: true})
+    }
   }
 
-  close() {
-    return this._socket.close()
+  private _onError(ev: Event) {
+    try {
+      this._socket?.close()
+    } catch (_) {
+    }
+    while (true) {
+      const waiter = this._waiters.shift()
+      if (!waiter) {
+        break
+      }
+      waiter.resolve({value: undefined, done: true})
+    }
   }
 
-  get url() {
-    return this._url
+  get connected() {
+    return this._socket?.readyState === WebSocket.OPEN
   }
 
-  set onClose(cb: (ev: Event) => void) {
-    this._socket.addEventListener('error', (ev) => {
-      cb(ev)
-    }, {once: true})
+  private _onOpen() {
+
+  }
+
+  set onclose(fn: (ev?: Event) => void) {
+    this._socket?.addEventListener('error',(ev)=>{
+      fn(ev)
+    })
   }
 
   [Symbol.asyncIterator]() {
     return this;
   }
 
-  async send(to: string | number | bigint, data: Blob) {
-    const url = Object.assign({}, this._url)
-    url.protocol = 'https'
-    url.pathname = to.toString()
-    const response = await fetch(url.toString(), {
-      method: 'POST',
-      body: data,
-    })
-    if (!response.ok) {
-      throw new Error(response.statusText || response.status.toString())
-    }
-  }
-
   next() {
     return new Promise<iterator>((resolve, reject) => {
-      switch (this.readyState) {
-        case WebSocket.CLOSED:
-        case WebSocket.CLOSING:
-          return reject(new Error('CLOSED'))
+      if (!this.connected) {
+        return reject(new Error('NOT CONNECTED'))
       }
-      const message = this._messages.shift()
-      if (message) {
-        return resolve({value: message, done: false})
+      const data = this._messages.shift()
+      if (data) {
+        return resolve({value: data, done: false})
       }
       this._waiters.push({resolve, reject})
     })
   }
 
-  private _handleMessage(ev: MessageEvent) {
-    const awaiter = this._waiters.shift()
-    if (awaiter) {
-      return awaiter.resolve({value: ev.data, done: false})
+  private _onMessage({data}: MessageEvent) {
+    const waiter = this._waiters.shift()
+    if (waiter) {
+      return waiter.resolve({value: data, done: false})
     }
-    this._messages.push(ev.data)
+    this._messages.push(data)
   }
 
-  private _handleClose(ev: CloseEvent) {
-    let waiter = this._waiters.shift()
-    while (waiter) {
-      waiter.resolve({value: undefined, done: true})
-      waiter = this._waiters.shift()
-    }
-  }
-
-  private _handleError(ev: ErrorEvent) {
-    let waiter = this._waiters.shift()
-    while (waiter) {
-      waiter.reject(ev)
-      waiter = this._waiters.shift()
-    }
-  }
-
-  static connect(host: string, port: number, id: number | string | bigint, auth?: string) {
-    const url = new URL(`https://${auth ? `${auth}@` : ''}${host}:${port}/${id.toString()}`)
-    return new Promise<Client>((resolve, reject) => {
-      const client = new Client(url as URL, key)
-      client._socket.addEventListener('error', (ev) => {
-        switch (client.readyState) {
-          case WebSocket.CONNECTING:
-          case WebSocket.OPEN:
-            client.close()
-        }
-        client._handleError(ev as ErrorEvent)
-        reject(ev)
-      }, {once: true})
-
-      client._socket.addEventListener('open', () => {
-        client._socket.addEventListener('close', client._handleClose.bind(client))
-        resolve(client)
-      }, {once: true})
-
-      client._socket.addEventListener('message', client._handleMessage.bind(client))
+  connect() {
+    return new Promise<unknown>((resolve, reject) => {
+      if (this._socket) {
+        return resolve(undefined)
+      }
+      this._socket = new WebSocket(this.toURL('wss').toString())
+      this._socket.addEventListener('error', this._onError.bind(this))
+      this._socket.addEventListener('open', this._onOpen.bind(this))
+      this._socket.addEventListener('close', this._onClose.bind(this))
+      this._socket.addEventListener('message', this._onMessage.bind(this))
+      this._socket.addEventListener('error', reject, {once: true})
+      this._socket.addEventListener('open', resolve, {once: true})
     })
   }
+
+  get host() {
+    return this._host
+  }
+
+  private get auth() {
+    return this._auth ?? undefined
+  }
+
+  get id() {
+    return this._id
+  }
+
+  private toURL(scheme = 'https') {
+    return Peer.toURL(this.host, this.id, scheme, this.auth)
+  }
+
+  toJSON() {
+    return {
+      host: this.host,
+      id: this.id,
+    }
+  }
+
+  static toURL(host: string, id: string, scheme: string, auth?: string) {
+    return new URL(`${scheme}://${auth ? `${auth}@` : ''}${host}/${id}`)
+  }
+
 }
 
-async function main() {
-  const cli = Client.connect('localhost', 4433, 123)
-}
 
-main().catch(console.error)
