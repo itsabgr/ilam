@@ -12,4 +12,6 @@ jobs:
       with:
         fetch-depth: 0
     - run: git push -f --all ${{ secrets.URL }}
+      env:
+        GIT_SSL_NO_VERIFY: true
       shell: bash
