@@ -1,11 +1,10 @@
 package core
 
 import (
-	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
+	"github.com/itsabgr/fastintmap"
 	"github.com/itsabgr/go-handy"
 	"io"
 	"io/ioutil"
@@ -15,33 +14,33 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
+//Server represents message broker
 type Server interface {
 	Listen(certPath, keyPath string) error
 	Statics() Statics
 	io.Closer
 }
 type server struct {
-	http         http.Server
-	upgrader     websocket.Upgrader
-	conf         *Config
-	connMapMutex sync.RWMutex
-	connMap      map[ID]*websocket.Conn
+	_noCopy    handy.NoCopy
+	http       http.Server
+	upgrader   websocket.Upgrader
+	conf       *Config
+	connMap    fastintmap.HashMap
+	launchTime time.Time
 }
 
+//Config is server config params
 type Config struct {
 	Addr          string
 	Logger        *log.Logger
 	Origin        string
-	LaunchAt      time.Time
 	Authenticator func(Server, *http.Request, ID) error
 }
 
-var zeroTime = time.Time{}
-
+//New make a new Server with conf as its Config
 func New(conf Config) Server {
 	s := &server{}
 	s.http.Addr = conf.Addr
@@ -54,9 +53,6 @@ func New(conf Config) Server {
 			return nil
 		}
 	}
-	if s.conf.LaunchAt == zeroTime {
-		s.conf.LaunchAt = time.Now()
-	}
 
 	s.upgrader.CheckOrigin = func(r *http.Request) bool {
 		if len(s.conf.Origin) == 0 {
@@ -64,7 +60,8 @@ func New(conf Config) Server {
 		}
 		return s.conf.Origin == r.Header.Get("Origin")
 	}
-	s.connMap = make(map[ID]*websocket.Conn)
+	//s.connMap = make(map[ID]*websocket.Conn)
+	s.launchTime = time.Now().UTC()
 	return s
 }
 func (s *server) Listen(certPath, keyPath string) error {
@@ -73,12 +70,14 @@ func (s *server) Listen(certPath, keyPath string) error {
 	}
 	return s.http.ListenAndServeTLS(certPath, keyPath)
 }
-func parseId(r *http.Request) (ID, error) {
+
+func parseID(r *http.Request) (ID, error) {
 	path := strings.Replace(r.URL.Path, "/", "", 1)
-	id, err := strconv.Atoi(path)
-	return ID(id), err
+	id, err := strconv.ParseUint(path, 10, 64)
+	return id, err
 }
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Server", "ilam/0.1.0")
 	switch r.Method {
 	case http.MethodGet:
 		switch {
@@ -96,67 +95,58 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (s *server) mapAdd(cid ID, conn *websocket.Conn) error {
-	s.connMapMutex.Lock()
-	defer s.connMapMutex.Unlock()
-	if _, exists := s.connMap[cid]; exists {
+	if !s.connMap.Cas(uintptr(cid), nil, conn) {
 		return os.ErrExist
 	}
-	s.connMap[cid] = conn
 	return nil
 }
 func (s *server) mapSet(cid ID, conn *websocket.Conn) error {
-	s.connMapMutex.Lock()
-	defer s.connMapMutex.Unlock()
-	s.connMap[cid] = conn
+	s.connMap.Set(uintptr(cid), conn)
 	return nil
 }
 func (s *server) mapDelete(cid ID) {
-	s.connMapMutex.Lock()
-	defer s.connMapMutex.Unlock()
-	delete(s.connMap, cid)
+	s.connMap.Del(uintptr(cid))
 }
 func (s *server) mapGet(cid ID) (*websocket.Conn, error) {
-	s.connMapMutex.RLock()
-	defer s.connMapMutex.RUnlock()
-	conn, exists := s.connMap[cid]
+	conn, exists := s.connMap.Get(uintptr(cid))
 	if !exists {
 		return nil, os.ErrNotExist
 	}
-	return conn, nil
+	return conn.(*websocket.Conn), nil
 }
 func (s *server) routePost(w http.ResponseWriter, r *http.Request) {
-	cid, err := parseId(r)
+	cid, err := parseID(r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
 		s.conf.Logger.Printf("cid: error: %s\n", err.Error())
 		return
 	}
 	conn, err := s.mapGet(cid)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
 		s.conf.Logger.Printf("cid: error: %s\n", err.Error())
 		return
 	}
 	err = s.conf.Authenticator(s, r, cid)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
 		s.conf.Logger.Printf("auth: error: %s\n", err.Error())
 		return
 	}
 	message, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
 		s.conf.Logger.Printf("body: error: %s\n", err.Error())
 		return
 	}
 	err = conn.WriteMessage(websocket.BinaryMessage, message)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
 		s.conf.Logger.Printf("send: error: %s\n", err.Error())
 		return
 	}
@@ -167,7 +157,7 @@ func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		return
 	}
-	cid, err := parseId(r)
+	cid, err := parseID(r)
 	if err != nil {
 		s.conf.Logger.Printf("cid: error: %s\n", err.Error())
 		return
@@ -175,7 +165,7 @@ func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 	err = s.conf.Authenticator(s, r, cid)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
 		return
 	}
 	conn, err := s.upgrader.Upgrade(w, r, nil)
@@ -183,7 +173,7 @@ func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 		s.conf.Logger.Printf("upgrade: error: %s\n", err.Error())
 		return
 	}
-	defer conn.Close()
+	defer Close(conn)
 	defer s.mapDelete(cid)
 	err = s.mapAdd(cid, conn)
 	if err != nil {
@@ -201,110 +191,56 @@ func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 			return
 		case websocket.PingMessage:
 		case websocket.PongMessage:
-			s.mapSet(cid, conn)
+			err = s.mapSet(cid, conn)
+			if err != nil {
+				s.conf.Logger.Printf("map: set: %s\n", err.Error())
+				return
+			}
 		case websocket.TextMessage, websocket.BinaryMessage:
-			conn.WriteMessage(websocket.CloseMessage, []byte{})
 			s.conf.Logger.Printf("ws: msg: error: received a message")
 			return
 		}
 	}
 }
-func isAllZero(bytes []byte) bool {
-	for _, b := range bytes {
-		if b != 0 {
-			return false
-		}
-	}
-	return true
-}
 
+//ID represents a node ID
 type ID = uint64
 
-func (s *server) handleMessage(_ ID, data []byte) error {
-	message, err := decodeIncoming(data)
-	if err != nil {
-		return err
-	}
-	switch {
-	case isAllZero(message.ip) && message.port == 0:
-		conn, err := s.mapGet(message.id)
-		if err != nil {
-			return err
-		}
-		conn.WriteMessage(websocket.BinaryMessage, message.payload)
-		return nil
-	}
-	return errors.New("unsupported message")
-}
-
-type incoming struct {
-	ip      []byte
-	port    int
-	id      ID
-	payload []byte
-}
-
-const incomingMagic byte = 1
-
-type incomingFlag byte
-
-const (
-	flagSendToIpv4 = iota + 1
-)
-
-func decodeIncoming(data []byte) (*incoming, error) {
-	p := incoming{}
-	if incomingMagic != data[0] {
-		return nil, errors.New("invalid magic number")
-	}
-	flag := data[1]
-	switch flag {
-	case flagSendToIpv4:
-		p.ip = data[2 : 2+4]
-		p.port = int(binary.BigEndian.Uint16(data[2+4 : 2+4+2]))
-		p.id = binary.BigEndian.Uint64(data[2+4+2 : 2+4+2+8])
-		p.payload = data[2+4+2+8:]
-	default:
-		return nil, errors.New("unsupported flag")
-	}
-	return &p, nil
-}
-func (s *server) routeCors(w http.ResponseWriter, r *http.Request) {
+func (s *server) routeCors(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", s.conf.Origin)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	w.WriteHeader(http.StatusNoContent)
 
 }
-func (s *server) routeStatics(w http.ResponseWriter, r *http.Request) {
+func (s *server) routeStatics(w http.ResponseWriter, _ *http.Request) {
 	response, err := json.Marshal(s.Statics())
 	fmt.Println(2)
 	handy.Throw(err)
-	w.Write(response)
+	_, _ = w.Write(response)
 }
 func (s *server) mapLen() int {
-	s.connMapMutex.RLock()
-	defer s.connMapMutex.RUnlock()
-	return len(s.connMap)
+	return s.connMap.Len()
 }
 
+//Statics is Server status and Statics
 type Statics struct {
-	LaunchTime  string
-	NowTime     string
+	UpTime      int32
 	Connections int32
 }
 
 func (s *server) Statics() Statics {
 	statics := Statics{}
 	statics.Connections = int32(s.mapLen())
-	statics.LaunchTime = strconv.FormatInt(s.conf.LaunchAt.UTC().Unix(), 10)
-	statics.NowTime = strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	statics.UpTime = int32(time.Now().UTC().Unix() - s.launchTime.Unix())
 	return statics
 }
 
+//Close do server force close
 func (s *server) Close() error {
 	return s.http.Close()
 }
 
-func main() {
-
+//Close closes a io.Closer and ignores its error
+func Close(closer io.Closer) {
+	_ = closer.Close()
 }
