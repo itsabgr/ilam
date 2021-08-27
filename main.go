@@ -37,6 +37,7 @@ func main() {
 		Addr:   CONFIG.ADDR,
 		Origin: CONFIG.ORIGIN,
 	})
+	defer server.Close()
 	logger.Println(fmt.Sprintf("%+v", CONFIG))
 	handy.Throw(server.Listen(CONFIG.CERT, CONFIG.KEY))
 }
