@@ -1,4 +1,4 @@
-go build -o build/linux_amd64
+go build -o build/ilam
 cd build
 git add .
 git commit -m release
