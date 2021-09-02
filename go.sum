@@ -2,10 +2,11 @@ github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0U
 github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/itsabgr/atomic2 v0.0.0-20210818210024-bb6ff09eb799 h1:LzDYrvWyi0NGW/tsHgDIKsFgWy/DP3JQrXG7i8hmVWc=
 github.com/itsabgr/atomic2 v0.0.0-20210818210024-bb6ff09eb799/go.mod h1:A9SJqNgBSTV3EAoMd0d/o3QPjFRakbz6FQwZSTYeb14=
-github.com/itsabgr/fastintmap v0.1.0 h1:HdtKpud4CRp4GHj7RPZTKyOOLFqGBxeq/ZbFW2nFVTE=
-github.com/itsabgr/fastintmap v0.1.0/go.mod h1:dsOw3Y2FLTlaBfLPPywA+DCBAu+GyeHXQnB8SGDHlAU=
-github.com/itsabgr/go-handy v0.0.0-20210823110817-5b8ca3ce7606 h1:FcIn1Z6GWw1479t2K3uNMUzFGNrI6ufb9A0w6xuJPQM=
+github.com/itsabgr/fastintmap v1.0.5 h1:RNcZRS6bf6leEwYvkFL8F3EmZI4gMUvLzC4wGp33pt4=
+github.com/itsabgr/fastintmap v1.0.5/go.mod h1:+KYbfvX90mW/sHUuWcJr06ER+eEdqLqcRKtps3VG46o=
 github.com/itsabgr/go-handy v0.0.0-20210823110817-5b8ca3ce7606/go.mod h1:/B0ggMYLkMBR70PwLieFK2aKpNdkyhMBCHuhz0FvY04=
+github.com/itsabgr/go-handy v0.0.0-20210902073134-7d177d4f47a1 h1:tBalQs+rFDX7NuPpCdAiljQ0/Y3VWc8RtaMXsdOE5UQ=
+github.com/itsabgr/go-handy v0.0.0-20210902073134-7d177d4f47a1/go.mod h1:/B0ggMYLkMBR70PwLieFK2aKpNdkyhMBCHuhz0FvY04=
 github.com/kkyr/fig v0.3.0 h1:5bd1amYKp/gsK2bGEUJYzcCrQPKOZp6HZD9K21v9Guo=
 github.com/kkyr/fig v0.3.0/go.mod h1:fEnrLjwg/iwSr8ksJF4DxrDmCUir5CaVMLORGYMcz30=
 github.com/mitchellh/mapstructure v1.4.1 h1:CpVNEelQCZBooIPDn+AR3NpivK/TIKU8bDxdASFVQag=

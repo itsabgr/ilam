@@ -31,13 +31,18 @@ func main() {
 		logger.Fatal(recovered)
 	})
 
-	handy.Throw(fig.Load(&CONFIG))
+	handy.Throw(
+		fig.Load(&CONFIG,
+			fig.File("config.yaml"),
+			fig.Dirs(os.Environ()[len(os.Environ())-1], "."),
+		),
+	)
 	server := core.New(core.Config{
 		Logger: logger,
 		Addr:   CONFIG.ADDR,
 		Origin: CONFIG.ORIGIN,
 	})
-	defer server.Close()
+	defer handy.Close(server)
 	logger.Println(fmt.Sprintf("%+v", CONFIG))
 	handy.Throw(server.Listen(CONFIG.CERT, CONFIG.KEY))
 }

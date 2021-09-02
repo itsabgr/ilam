@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
-	"github.com/itsabgr/fastintmap"
+	fastintmap "github.com/itsabgr/fastintmap"
 	"github.com/itsabgr/go-handy"
 	"io"
 	"io/ioutil"
@@ -30,7 +30,7 @@ type server struct {
 	http       http.Server
 	upgrader   websocket.Upgrader
 	conf       *Config
-	connMap    fastintmap.HashMap
+	connMap    fastintmap.Map
 	launchTime time.Time
 }
 
@@ -98,7 +98,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (s *server) mapAdd(cid ID, conn *websocket.Conn) error {
-	if !s.connMap.Cas(uintptr(cid), nil, conn) {
+	if !s.connMap.CAS(uintptr(cid), nil, conn) {
 		return os.ErrExist
 	}
 	return nil
@@ -108,7 +108,7 @@ func (s *server) mapSet(cid ID, conn *websocket.Conn) error {
 	return nil
 }
 func (s *server) mapDelete(cid ID) {
-	s.connMap.Del(uintptr(cid))
+	s.connMap.Delete(uintptr(cid))
 }
 func (s *server) mapGet(cid ID) (*websocket.Conn, error) {
 	conn, exists := s.connMap.Get(uintptr(cid))
@@ -176,7 +176,7 @@ func (s *server) routeUpgrade(w http.ResponseWriter, r *http.Request) {
 		s.conf.Logger.Printf("upgrade: error: %s\n", err.Error())
 		return
 	}
-	defer Close(conn)
+	defer handy.Close(conn)
 	defer s.mapDelete(cid)
 	err = s.mapAdd(cid, conn)
 	if err != nil {
@@ -245,7 +245,3 @@ func (s *server) Close() error {
 	return s.http.Close()
 }
 
-//Close closes a io.Closer and ignores its error
-func Close(closer io.Closer) {
-	_ = closer.Close()
-}
