@@ -217,7 +217,6 @@ func (s *server) routeCors(w http.ResponseWriter, _ *http.Request) {
 }
 func (s *server) routeStatics(w http.ResponseWriter, _ *http.Request) {
 	response, err := json.Marshal(s.Statics())
-	fmt.Println(2)
 	handy.Throw(err)
 	_, _ = w.Write(response)
 }
