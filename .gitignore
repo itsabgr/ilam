@@ -14,5 +14,5 @@ ilam
 *.html
 *.htm
 *.log
-bin
+build
 clients
