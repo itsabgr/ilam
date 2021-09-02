@@ -8,7 +8,7 @@
 *.iml
 node_modules
 package-lock.json
-ilam
+build/ilam
 *.exe
 *.js
 *.html

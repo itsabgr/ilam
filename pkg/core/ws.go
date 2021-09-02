@@ -55,7 +55,8 @@ func New(conf Config) Server {
 	}
 
 	s.upgrader.CheckOrigin = func(r *http.Request) bool {
-		if len(s.conf.Origin) == 0 {
+		switch s.conf.Origin {
+		case "", "*":
 			return true
 		}
 		return s.conf.Origin == r.Header.Get("Origin")
