@@ -33,7 +33,7 @@ func getConfigPath() (string, string) {
 	handy.Close(file)
 	if err != nil {
 		if os.IsNotExist(err) {
-			path = "./config.yaml"
+			path = "./ilam.yaml"
 		} else {
 			panic(err)
 		}
