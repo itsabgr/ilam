@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 )
 
 //CONFIG is app config
@@ -26,15 +27,34 @@ func init() {
 		logger.Fatal("signal: ", <-closeSignal)
 	}()
 }
+func getConfigPath() (string, string) {
+	path := os.Environ()[len(os.Environ())-1]
+	file, err := os.OpenFile(path, os.O_RDONLY, 0666)
+	handy.Close(file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			path = "./config.yaml"
+		} else {
+			panic(err)
+		}
+	}
+	path, err = filepath.Abs(path)
+	handy.Throw(err)
+	return filepath.Dir(path), filepath.Base(path)
+
+}
 func main() {
 	defer handy.Catch(func(recovered interface{}) {
 		logger.Fatal(recovered)
 	})
+	configFileDir, configFileName := getConfigPath()
+	logger.Println("Version:", core.Version)
+	logger.Printf("Open: %s/%s\n", configFileDir, configFileName)
 
 	handy.Throw(
 		fig.Load(&CONFIG,
-			fig.File("config.yaml"),
-			fig.Dirs(os.Environ()[len(os.Environ())-1], "."),
+			fig.File(configFileName),
+			fig.Dirs(configFileDir),
 		),
 	)
 	server := core.New(core.Config{
@@ -43,6 +63,6 @@ func main() {
 		Origin: CONFIG.ORIGIN,
 	})
 	defer handy.Close(server)
-	logger.Println(fmt.Sprintf("%+v", CONFIG))
+	logger.Println(fmt.Sprintf("Config %+v", CONFIG))
 	handy.Throw(server.Listen(CONFIG.CERT, CONFIG.KEY))
 }
