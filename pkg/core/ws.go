@@ -17,6 +17,8 @@ import (
 	"time"
 )
 
+const Version = "0.1.0"
+
 //Server represents message broker
 type Server interface {
 	Listen(certPath, keyPath string) error
@@ -227,12 +229,14 @@ func (s *server) mapLen() int {
 type Statics struct {
 	UpTime      int32
 	Connections int32
+	Version     string
 }
 
 func (s *server) Statics() Statics {
 	statics := Statics{}
 	statics.Connections = int32(s.mapLen())
 	statics.UpTime = int32(time.Now().UTC().Unix() - s.launchTime.Unix())
+	statics.Version = Version
 	return statics
 }
 
