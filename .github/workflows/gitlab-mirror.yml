@@ -2,8 +2,6 @@ name: gitlab-mirror
 
 on: 
   - push
-  - delete
-
 jobs:
   sync:
     environment: GITLAB
@@ -13,6 +11,7 @@ jobs:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
-    - uses: itsabgr/mirror-repo@v1.0.3
-      with:
-        target-url: ${{ secrets.URL }}
+    - run: git push -f --all ${{ secrets.URL }}
+      env:
+        GIT_SSL_NO_VERIFY: true
+      shell: bash
