@@ -27,6 +27,7 @@ This system addressing Each node with two parameters:
 *that is used to identify the target node connection and is a decimal between 1 and 2^31-1*
 
 **Send**
+
 for sending, each node uses target node broker and target node id to make an HTTP `POST` call:
 
 `https://{target broker}/{target ID}`
@@ -35,6 +36,7 @@ then returns 204 status without a body if was successful
 In case of error, other status codes with a body that is the error description.
 
 **Receive**
+
 for receiving, each node should connect to itself broker and makes a `GET` request
 
 `https://{broker address}/{desired ID}`
